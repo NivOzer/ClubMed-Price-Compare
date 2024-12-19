@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+from tkcalendar import DateEntry
 import pandas as pd
 import os
 import threading
@@ -35,7 +36,7 @@ def load_data():
     return pd.DataFrame()
 
 # Display filtered or all data
-def display_data():
+def display_data(data=None):
     for widget in main_frame.winfo_children():
         widget.destroy()
 
@@ -45,7 +46,10 @@ def display_data():
         "Serre Chevalier", "Pragelato Sestriere", "Saint-Moritz"
     ]
 
-    if resort_data.empty:
+    # Use filtered data if provided, else full dataset
+    current_data = data if data is not None else resort_data
+
+    if current_data.empty:
         tk.Label(main_frame, text="No data available. Hit 'Scrape Data' to fetch data.",
                  font=("Helvetica", 14), bg="#f5f5f5", fg="#333").pack(pady=20)
         return
@@ -65,7 +69,6 @@ def display_data():
     for c in range(cols):
         main_frame.grid_columnconfigure(c, weight=1)
 
-    # Function to sort table
     def sort_table(table, col, resort_df, reverse):
         sorted_df = resort_df.sort_values(by=col, ascending=not reverse)
         table.delete(*table.get_children())  # Clear table
@@ -77,16 +80,16 @@ def display_data():
         row, col = divmod(index, cols)
 
         # Centered Frame with fixed size
-        frame = tk.Frame(main_frame, bg="#EAF4FC", bd=2, relief="ridge", width=table_width, height=table_height)
+        frame = ttk.Frame(main_frame)
         frame.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
         frame.grid_propagate(False)
 
-        tk.Label(frame, text=resort, bg="#007BFF", fg="white", font=("Helvetica", 14, "bold"), pady=5).pack(fill="x")
+        ttk.Label(frame, text=resort, background="#007BFF", foreground="white", font=("Helvetica", 14, "bold"), anchor="center").pack(fill="x")
 
         # Resort-specific data (remove duplicates by 'Date')
         resort_df = (
-            resort_data[resort_data['Resort Name'] == resort]
-            .drop_duplicates(subset=['Date'], keep='first')  # Keep the first price for each unique date
+            current_data[current_data['Resort Name'] == resort]
+            .drop_duplicates(subset=['Date'], keep='first')
         )
 
         # Table inside the fixed frame
@@ -101,106 +104,66 @@ def display_data():
         for _, row in resort_df.iterrows():
             table.insert("", "end", values=(row["Date"].date(), row["Price (€)"]))
 
-# Scraper logic
-def scrape_data():
-    latest_time = get_latest_scrape_time()
-    current_time = datetime.now()
-
-    if latest_time and (current_time - latest_time) < timedelta(minutes=30):
-        response = messagebox.askyesno("Recent Scrape Detected",
-                                       "You have already scraped data within the last 30 minutes.\nAre you sure you want to scrape again?")
-        if not response:
-            return
-
-    def run_scraper():
-        messagebox.showinfo("Info", "Scraping data... Please wait!")
-        os.system("python scraper.py")
-        global resort_data
-        resort_data = load_data()
-        display_data()
-        messagebox.showinfo("Success", "Data updated successfully!")
-
-    threading.Thread(target=run_scraper).start()
-
-def get_latest_scrape_time():
-    files = os.listdir()
-    pattern = re.compile(r"prices_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})\.csv")
-    latest_time = None
-
-    for file in files:
-        match = pattern.match(file)
-        if match:
-            date_part, time_part = match.groups()
-            file_datetime = datetime.strptime(f"{date_part}_{time_part}", "%Y-%m-%d_%H-%M-%S")
-            if not latest_time or file_datetime > latest_time:
-                latest_time = file_datetime
-    return latest_time
-
-# Price Filter
+# Filter data by date and price range
 def filter_data():
     global resort_data
-    filtered_data = load_data()
-    min_val, max_val = min_price.get(), max_price.get()
+    start_date = start_date_var.get_date()
+    end_date = end_date_var.get_date()
+    max_val = price_range_var.get()  # Corrected: Use slider value
 
-    if not filtered_data.empty:
-        filtered_data = filtered_data[
-            (filtered_data["Price (€)"] >= min_val) & (filtered_data["Price (€)"] <= max_val)
-        ]
-        resort_data = filtered_data
-        display_data()
+    if start_date and end_date:
+        filtered_data = resort_data[(resort_data["Date"] >= pd.Timestamp(start_date)) &
+                                    (resort_data["Date"] <= pd.Timestamp(end_date)) &
+                                    (resort_data["Price (€)"] <= max_val)]
+        if not filtered_data.empty:
+            display_data(filtered_data)
+        else:
+            messagebox.showinfo("No Data", "No data available for the selected filters.")
+    else:
+        messagebox.showerror("Invalid Filters", "Please select a valid date range and price range.")
 
 # GUI setup
 root = tk.Tk()
 root.title("Club Med Price Comparison")
-root.geometry("1200x600")
+root.geometry("1200x700")
 root.configure(bg="#f5f5f5")
 
 # Title
-tk.Label(root, text="Club Med Price Comparison", font=("Helvetica", 20, "bold"), bg="#f5f5f5", fg="#333").pack(pady=10)
+ttk.Label(root, text="Club Med Price Comparison", font=("Helvetica", 20, "bold"), background="#f5f5f5", foreground="#333").pack(pady=10)
 
-# Buttons
-button_frame = tk.Frame(root, bg="#f5f5f5")
-button_frame.pack()
-ttk.Button(button_frame, text="Scrape Data", command=scrape_data).pack(side="left", padx=10)
-ttk.Button(button_frame, text="Refresh", command=display_data).pack(side="left", padx=10)
+# Filter Frame
+filter_frame = ttk.Frame(root)
+filter_frame.pack(pady=10, padx=10, fill="x")
 
-# Price Range Filter
-price_frame = tk.Frame(root, bg="#f5f5f5")
-price_frame.pack(pady=10)
+# Start Date
+ttk.Label(filter_frame, text="Start Date:", font=("Helvetica", 12)).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+start_date_var = DateEntry(filter_frame, width=12, background='darkblue', foreground='white', borderwidth=2)
+start_date_var.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
-tk.Label(price_frame, text="Select Price Range (€):", font=("Helvetica", 12), bg="#f5f5f5", fg="#333").grid(row=0, column=0, columnspan=2, pady=5)
+# End Date
+ttk.Label(filter_frame, text="End Date:", font=("Helvetica", 12)).grid(row=0, column=2, padx=5, pady=5, sticky="w")
+end_date_var = DateEntry(filter_frame, width=12, background='darkblue', foreground='white', borderwidth=2)
+end_date_var.grid(row=0, column=3, padx=5, pady=5, sticky="w")
 
-# Slider Values
-min_price = tk.IntVar(value=0)
-max_price = tk.IntVar(value=5000)
+# Price Range Slider
+ttk.Label(filter_frame, text="Max Price (€):", font=("Helvetica", 12)).grid(row=1, column=0, padx=5, pady=5, sticky="w")
+price_range_var = tk.DoubleVar(value=5000)
+price_range = ttk.Scale(filter_frame, from_=0, to=5000, orient="horizontal", length=300, variable=price_range_var)
+price_range.grid(row=1, column=1, columnspan=3, padx=5, pady=5)
+price_value = tk.Label(filter_frame, text=f"Max: 5000 €", font=("Helvetica", 10))
+price_value.grid(row=2, column=1, columnspan=3, padx=5, pady=5)
 
-# Real-Time Slider Labels
-min_price_label = tk.Label(price_frame, text=f"Min: {min_price.get()} €", font=("Helvetica", 10), bg="#f5f5f5")
-min_price_label.grid(row=1, column=2, padx=5)
-max_price_label = tk.Label(price_frame, text=f"Max: {max_price.get()} €", font=("Helvetica", 10), bg="#f5f5f5")
-max_price_label.grid(row=2, column=2, padx=5)
+# Update Price Range Value
+def update_price_range(val):
+    price_value.config(text=f"Max: {int(float(val))} €")
 
-# Slider Update Functions
-def update_min_price(val):
-    min_price_label.config(text=f"Min: {int(float(val))} €")
+price_range.configure(command=update_price_range)
 
-def update_max_price(val):
-    max_price_label.config(text=f"Max: {int(float(val))} €")
-
-# Min Slider
-tk.Label(price_frame, text="Min:", font=("Helvetica", 10), bg="#f5f5f5").grid(row=1, column=0, padx=5)
-min_slider = ttk.Scale(price_frame, from_=0, to=5000, orient="horizontal", variable=min_price, length=300, command=update_min_price)
-min_slider.grid(row=1, column=1, padx=5)
-
-# Max Slider
-tk.Label(price_frame, text="Max:", font=("Helvetica", 10), bg="#f5f5f5").grid(row=2, column=0, padx=5)
-max_slider = ttk.Scale(price_frame, from_=0, to=5000, orient="horizontal", variable=max_price, length=300, command=update_max_price)
-max_slider.grid(row=2, column=1, padx=5)
-
-ttk.Button(price_frame, text="Apply Filter", command=filter_data).grid(row=3, column=0, columnspan=2, pady=10)
+# Apply Filter Button
+ttk.Button(filter_frame, text="Apply Filters", command=filter_data).grid(row=3, column=0, columnspan=4, pady=10)
 
 # Main Frame
-main_frame = tk.Frame(root, bg="#f5f5f5")
+main_frame = ttk.Frame(root)
 main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
 # Initial Data Load
