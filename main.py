@@ -81,7 +81,6 @@ def display_data():
         frame.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
         frame.grid_propagate(False)
 
-        # Bubbly Resort Title
         tk.Label(frame, text=resort, bg="#007BFF", fg="white", font=("Helvetica", 14, "bold"), pady=5).pack(fill="x")
 
         # Resort-specific data
