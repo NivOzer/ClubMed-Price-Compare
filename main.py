@@ -28,7 +28,7 @@ def load_data():
             if 'Resort Name' in df.columns and 'Date' in df.columns:
                 df['Date'] = pd.to_datetime(df['Date'])
                 df["Price (€)"] = pd.to_numeric(df["Price (€)"], errors="coerce")
-                return df.sort_values(by=['Resort Name', 'Date'])
+                return df.drop_duplicates().sort_values(by=['Resort Name', 'Date'])
         except Exception as e:
             print(f"Error reading file {latest_file}: {e}")
 
@@ -83,8 +83,11 @@ def display_data():
 
         tk.Label(frame, text=resort, bg="#007BFF", fg="white", font=("Helvetica", 14, "bold"), pady=5).pack(fill="x")
 
-        # Resort-specific data
-        resort_df = resort_data[resort_data['Resort Name'] == resort]
+        # Resort-specific data (remove duplicates by 'Date')
+        resort_df = (
+            resort_data[resort_data['Resort Name'] == resort]
+            .drop_duplicates(subset=['Date'], keep='first')  # Keep the first price for each unique date
+        )
 
         # Table inside the fixed frame
         table = ttk.Treeview(frame, columns=("Date", "Price (€)"), show="headings", height=8)
@@ -94,6 +97,7 @@ def display_data():
         table.column("Price (€)", anchor="center", stretch=True, minwidth=120)
         table.pack(fill="both", expand=True)
 
+        # Insert rows into the table
         for _, row in resort_df.iterrows():
             table.insert("", "end", values=(row["Date"].date(), row["Price (€)"]))
 
