@@ -100,5 +100,3 @@ def scrape_clubmed_data():
         print("No valid data was scraped.")
 
     driver.quit()
-
-scrape_clubmed_data()

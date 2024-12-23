@@ -29,7 +29,7 @@ def load_data():
     for file in files:
         match = pattern.match(file)
         if match:
-            date_part, time_part = match.groups()
+            date_part, time_part = match.groups()  # Extract date_part and time_part here
             file_datetime = datetime.strptime(f"{date_part}_{time_part}", "%Y-%m-%d_%H-%M-%S")
             if not latest_time or file_datetime > latest_time:
                 latest_time = file_datetime
@@ -46,6 +46,7 @@ def load_data():
             print(f"Error reading file {latest_file}: {e}")
 
     return pd.DataFrame()
+
 
 def display_data(data=None):
     for widget in main_frame.winfo_children():
